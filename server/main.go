@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"os"
+	"syscall"
 	"time"
 )
 
@@ -12,10 +15,14 @@ const (
 	tcpListenAddrEnvName = "TCP_CONNECTION_LISTEN_ADDR"
 )
 
+var (
+	argAddr = flag.String("l", "", "listen tcp address")
+	sleepSecs = flag.Int("s", 1, "wait before exit after first incoming connection")
+	noClose = flag.Bool("no-close", false, "not close connection behaviour")
+	noReuseAddr = flag.Bool("no-reuse-addr", false, "not close connection behaviour")
+)
 
 func main() {
-	argAddr := flag.String("l", "", "listen tcp address")
-	sleepSecs := flag.Int("s", 3, "wait before exit after first incoming connection")
 	flag.Parse()
 
 	flag.Usage = func() {
@@ -40,10 +47,6 @@ func main() {
 	fmt.Println("TCP bind to:", addr)
 
 	listen(addr)
-	fmt.Printf(" waiting %v seconds\n", *sleepSecs)
-	time.Sleep(time.Duration(*sleepSecs*int(time.Second)))
-	fmt.Println(" exit")
-	os.Exit(0)
 }
 
 func listen(address string) {
@@ -54,7 +57,33 @@ func listen(address string) {
 		os.Exit(1)
 	}
 
-	listener, err := net.Listen("tcp", addr.String())
+	lCfg := &net.ListenConfig{}
+	lCfg.Control = func(network, address string, c syscall.RawConn) error {
+		fmt.Println("ListenConfig")
+		fmt.Println("network:", network)
+		fmt.Println("address:", address)
+		var fn = func(s uintptr) {
+			if *noReuseAddr {
+				setErr := syscall.SetsockoptInt(int(s), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 0)
+				if setErr != nil {
+					log.Fatal(setErr)
+				}
+			}
+
+			val, getErr := syscall.GetsockoptInt(int(s), syscall.SOL_SOCKET, syscall.SO_REUSEADDR)
+			if getErr != nil {
+				log.Fatal(getErr)
+			}
+			log.Printf("value of SO_REUSEADDR option is: %d", int(val))
+		}
+		if err := c.Control(fn); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	listener, err := lCfg.Listen(context.Background(), "tcp", addr.String())
+	// listener, err := net.Listen("tcp", addr.String())
 	if err != nil {
 		fmt.Println("Failed to", err.Error())
 		os.Exit(1)
@@ -64,12 +93,24 @@ func listen(address string) {
 		_, err := listener.Accept()
 		if err != nil {
 			if opErr, ok := err.(*net.OpError); ok && opErr.Timeout() {
+				fmt.Println("got error:", opErr)
 				continue
 			}
 			fmt.Println("Failed to accept connection:", err.Error())
 			continue
 		}
 		fmt.Println("got connection")
-		return
+		break
 	}
+
+	fmt.Printf(" waiting %v seconds\n", *sleepSecs)
+	time.Sleep(time.Duration(*sleepSecs*int(time.Second)))
+
+	if !*noClose {
+		fmt.Println("close conn")
+		listener.Close()
+	}
+
+	fmt.Println(" exit")
+	os.Exit(0)
 }

@@ -13,10 +13,13 @@ const (
 	tcpEndpointEnvName = "TCP_CONNECTION_ENDPOINT"
 )
 
+var (
+	argAddr = flag.String("e", "", "tcp connection endpoint")
+	sleepSecs = flag.Int("s", 10, "sleep before stop")
+	notClose = flag.Bool("noclose", false, "not close connection behaviour")
+)
 
 func main() {
-	argAddr := flag.String("e", "", "tcp connection endpoint")
-	sleepSecs := flag.Int("s", 1, "sleep before stop")
 	flag.Parse()
 
 	flag.Usage = func() {
@@ -41,16 +44,22 @@ func main() {
 	fmt.Println("connect to tcp endpoint:", addr)
 
 	connect(addr)
-	fmt.Printf(" waiting %v seconds\n", *sleepSecs)
-	time.Sleep(time.Duration(*sleepSecs*int(time.Second)))
+
 	fmt.Println(" exit")
 	os.Exit(0)
 }
 
 func connect(addr string) {
-	_, err := net.Dial("tcp", addr)
+	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		log.Fatalf("failed connect to %v: %v", addr, err)
 	}
 	fmt.Print("connected")
+
+	fmt.Printf(" waiting %v seconds\n", *sleepSecs)
+	time.Sleep(time.Duration(*sleepSecs*int(time.Second)))
+	if !*notClose {
+		fmt.Println("close conn")
+		conn.Close()
+	}
 }
