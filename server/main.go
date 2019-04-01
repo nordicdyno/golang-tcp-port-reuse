@@ -16,9 +16,9 @@ const (
 )
 
 var (
-	argAddr = flag.String("l", "", "listen tcp address")
-	sleepSecs = flag.Int("s", 1, "wait before exit after first incoming connection")
-	noClose = flag.Bool("no-close", false, "not close connection behaviour")
+	argAddr     = flag.String("l", "", "listen tcp address")
+	sleepSecs   = flag.Int("w", 1, "wait before exit after first incoming connection")
+	noClose     = flag.Bool("no-close", false, "not close connection behaviour")
 	noReuseAddr = flag.Bool("no-reuse-addr", false, "not close connection behaviour")
 )
 
@@ -89,22 +89,22 @@ func listen(address string) {
 		os.Exit(1)
 	}
 
-	for {
-		_, err := listener.Accept()
-		if err != nil {
-			if opErr, ok := err.(*net.OpError); ok && opErr.Timeout() {
-				fmt.Println("got error:", opErr)
+	go func() {
+		for {
+			_, err := listener.Accept()
+			if err != nil {
+				if opErr, ok := err.(*net.OpError); ok && opErr.Timeout() {
+					fmt.Println("got error:", opErr)
+				}
+				fmt.Println("Failed to accept connection:", err.Error())
 				continue
 			}
-			fmt.Println("Failed to accept connection:", err.Error())
-			continue
+			fmt.Println("got connection")
 		}
-		fmt.Println("got connection")
-		break
-	}
+	}()
 
 	fmt.Printf(" waiting %v seconds\n", *sleepSecs)
-	time.Sleep(time.Duration(*sleepSecs*int(time.Second)))
+	time.Sleep(time.Duration(*sleepSecs * int(time.Second)))
 
 	if !*noClose {
 		fmt.Println("close conn")

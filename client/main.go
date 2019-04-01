@@ -3,10 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"time"
-	"log"
 )
 
 const (
@@ -14,9 +14,10 @@ const (
 )
 
 var (
-	argAddr = flag.String("e", "", "tcp connection endpoint")
-	sleepSecs = flag.Int("s", 10, "sleep before stop")
-	notClose = flag.Bool("noclose", false, "not close connection behaviour")
+	argAddr    = flag.String("e", "", "tcp connection endpoint")
+	sourceAddr = flag.String("s", "", "client address to bind")
+	sleepSecs  = flag.Int("w", 10, "wait N seconds before exit")
+	notClose   = flag.Bool("noclose", false, "not close connection behaviour")
 )
 
 func main() {
@@ -50,14 +51,22 @@ func main() {
 }
 
 func connect(addr string) {
-	conn, err := net.Dial("tcp", addr)
+	dialer := net.Dialer{}
+	if *sourceAddr != "" {
+		tcpAddr, err := net.ResolveTCPAddr("tcp", *sourceAddr)
+		if err != nil {
+			panic(err)
+		}
+		dialer.LocalAddr = tcpAddr
+	}
+	conn, err := dialer.Dial("tcp", addr)
 	if err != nil {
 		log.Fatalf("failed connect to %v: %v", addr, err)
 	}
 	fmt.Print("connected")
 
 	fmt.Printf(" waiting %v seconds\n", *sleepSecs)
-	time.Sleep(time.Duration(*sleepSecs*int(time.Second)))
+	time.Sleep(time.Duration(*sleepSecs * int(time.Second)))
 	if !*notClose {
 		fmt.Println("close conn")
 		conn.Close()
